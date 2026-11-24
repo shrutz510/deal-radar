@@ -1,0 +1,5 @@
+# local data: your wishlist, profile and scraped items
+deals.db
+deals.db-*
+__pycache__/
+.DS_Store

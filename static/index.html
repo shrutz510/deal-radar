@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deal Radar</title>
+  <script>
+    // apply the saved theme before first paint so the page never flashes the wrong one
+    try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23c48690'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='Arial'>%E2%99%A1</text></svg>">
+</head>
+<body>
+  <div class="blobs" aria-hidden="true"><i></i><i></i></div>
+
+  <header class="topbar">
+    <div class="brand"><span class="flower">✿</span><h1>Deal Radar</h1><span id="countdown" class="countpill"></span></div>
+    <div class="refresh">
+      <span id="updated" class="muted"></span>
+      <button id="themeBtn" class="btn soft small" title="Switch between automatic, light and dark"></button>
+      <button id="profileBtn" class="btn soft small">My profile</button>
+      <button id="refreshBtn" class="btn soft small" title="Look for new items now">
+        <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel feed">
+      <div class="shop-head">
+        <h2>Shop the <em>edit</em></h2>
+        <p id="forYou" class="for-you"></p>
+      </div>
+      <div id="cats" class="chips"></div>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Search, e.g. black dress, wide leg, lip oil…">
+        <select id="source" title="Store"><option value="">All stores</option></select>
+        <select id="sort" title="Sort">
+          <option value="score">Picked for me</option>
+          <option value="shuffle">Surprise me</option>
+          <option value="discount">Biggest discount</option>
+          <option value="price">Lowest price</option>
+          <option value="new">Newest</option>
+        </select>
+        <label class="toggle"><input id="saleOnly" type="checkbox"> On sale only</label>
+      </div>
+      <div id="spotlight"></div>
+      <div id="deals" class="grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>My <em>wishlist</em></h2>
+        <button class="btn soft small" id="addWishBtn">+ Add a wish</button>
+      </div>
+      <form id="wishForm" class="wish-form hidden">
+        <input name="query" placeholder='What are you wishing for? e.g. airpods pro 3 -case' required>
+        <label class="money"><span>$</span><input name="target_price" type="number" step="0.01" min="0" placeholder="Dream price"></label>
+        <select name="priority" title="Priority">
+          <option value="1">Must have</option>
+          <option value="2" selected>Want</option>
+          <option value="3">Maybe</option>
+        </select>
+        <input name="note" placeholder="Color / size / shade (optional)">
+        <input name="product_url" type="url" placeholder="Product link to price-check (optional)">
+        <button class="btn">Add to wishlist ♡</button>
+        <p class="hint">Every word has to be in the item's name (store names count). Use <code>-word</code> to skip something and <code>"two words"</code> for an exact phrase.</p>
+      </form>
+      <div id="wishlist" class="wishgrid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Sale <em>dates</em></h2>
+        <button class="btn soft small" id="addEventBtn">+ Add a date</button>
+      </div>
+      <form id="eventForm" class="inline-form hidden">
+        <input name="retailer" placeholder="Store (e.g. Sephora)" required>
+        <input name="name" placeholder="Sale name" required>
+        <label>Starts <input name="start" type="date" required value="2026-11-20"></label>
+        <label>Ends <input name="end" type="date"></label>
+        <input name="note" placeholder="Note (optional)">
+        <button class="btn">Save</button>
+      </form>
+      <div id="timeline" class="tickets"></div>
+    </section>
+  </main>
+
+  <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+    <form id="profileForm" class="sheet">
+      <div class="panel-head">
+        <h2 id="profileTitle">My shopping <em>profile</em></h2>
+        <button type="button" class="btn soft small" data-close>Close</button>
+      </div>
+      <p class="hint">Store items show when you have a section with their name (Clothes, Jeans, Makeup…). The keywords below sort posts from DealNews and Ben's Bargains (earphones, perfume and makeup deals at big retailers). Saving runs a fresh search.</p>
+      <div class="field"><span>Start from a sample <em>replaces the profile below</em></span><div id="samples" class="sample-row"></div></div>
+      <label class="field"><span>About me</span><textarea name="about" rows="2"></textarea></label>
+      <label class="field"><span>Brands I love <em>any DealNews or Ben's Bargains deal naming them shows</em></span><textarea name="brands" rows="3"></textarea></label>
+      <label class="field"><span>Big stores <em>only their deals that fit a section, or store-wide sales</em></span><textarea name="stores" rows="1"></textarea></label>
+      <label class="field"><span>Stores to browse <em id="shopsHint">leave empty to browse every store</em></span><textarea name="shops" rows="2"></textarea></label>
+      <div class="field"><span>Sections <em>★ = featured row at the top</em></span>
+        <div id="interests"></div>
+        <button type="button" class="btn soft small" id="addInterest">+ Add section</button>
+      </div>
+      <label class="field"><span>Never show <em>anything mentioning these is hidden</em></span><textarea name="avoid" rows="2"></textarea></label>
+      <div class="sheet-foot">
+        <button type="button" class="linkish" id="resetProfile">Reset to default</button>
+        <button class="btn">Save profile</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="app.js?v=6"></script>
+</body>
+</html>
