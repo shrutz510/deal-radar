@@ -10,18 +10,18 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23c48690'/><text x='16' y='22' font-size='17' text-anchor='middle' fill='white' font-family='Arial'>%E2%99%A1</text></svg>">
 </head>
 <body>
   <div class="blobs" aria-hidden="true"><i></i><i></i></div>
 
   <header class="topbar">
-    <div class="brand"><span class="flower">✿</span><h1>Deal Radar</h1><span id="countdown" class="countpill"></span></div>
+    <div class="brand"><span class="flower">✿</span><h1 id="appTitle">Deal Radar</h1><span id="countdown" class="countpill"></span></div>
     <div class="refresh">
       <span id="updated" class="muted"></span>
       <button id="themeBtn" class="btn soft small" title="Switch between automatic, light and dark"></button>
-      <button id="profileBtn" class="btn soft small">My profile</button>
+      <button id="profileBtn" class="btn soft small">Preferences</button>
       <button id="refreshBtn" class="btn soft small" title="Look for new items now">
         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
         <span>Refresh</span>
@@ -29,15 +29,58 @@
     </div>
   </header>
 
-  <main>
+  <section id="setup" class="setup hidden" aria-labelledby="setupTitle">
+    <form id="setupForm" class="setup-card">
+      <h2 id="setupTitle">Set up your <em>deal finder</em></h2>
+      <p class="hint">Tell it what you shop for and it builds the feed, store list and filters around that. You can change everything later.</p>
+
+      <div class="field"><span>Start from a preset <em>optional; fills in the form below</em></span><div id="presets" class="sample-row"></div></div>
+
+      <label class="field"><span>Name</span><input name="title" placeholder="Deal Radar"></label>
+
+      <div class="field"><span>Shopping for</span><div id="setupDept" class="pick-row"></div></div>
+
+      <div class="field"><span>Categories <em>what you want deals on</em></span>
+        <div id="setupCats" class="pick-row"></div>
+        <div id="setupCustom"></div>
+        <button type="button" class="btn soft small" id="addCustom">+ Add your own category</button>
+      </div>
+
+      <label class="field"><span>Feature one category <em>its best deals get a row at the top</em></span><select name="featured" id="setupFeatured"></select></label>
+
+      <div class="field"><span>Stores to browse <em>suggested from your answers above; click to change</em></span><div id="setupStores" class="pick-row"></div></div>
+
+      <label class="field"><span>Brands you like <em>comma-separated; they rank first and any deal naming them shows</em></span><textarea name="brands" rows="2" placeholder="e.g. Zara, Uniqlo, Sony"></textarea></label>
+
+      <div class="field"><span>Hide</span>
+        <label class="toggle"><input type="checkbox" name="hide_common" checked> Kids', home, auto and other off-topic deals</label>
+        <textarea name="avoid" rows="1" placeholder="other words to hide, comma-separated"></textarea>
+      </div>
+
+      <div class="field"><span>Countdown <em>optional, e.g. a sale day or a birthday</em></span>
+        <div class="pick-row"><input name="countdown_label" placeholder="What are you counting down to?"><input name="countdown_date" type="date"></div>
+      </div>
+
+      <label class="field"><span>Sale dates <em>preload a calendar of known sale events</em></span><select name="sale_dates" id="setupSaleDates"></select></label>
+
+      <label class="field"><span>About <em>optional note for yourself</em></span><textarea name="about" rows="2"></textarea></label>
+
+      <div class="sheet-foot">
+        <button type="button" class="linkish hidden" id="setupCancel">Cancel</button>
+        <button class="btn">Build my deal finder</button>
+      </div>
+    </form>
+  </section>
+
+  <main id="app">
     <section class="panel feed">
       <div class="shop-head">
-        <h2>Shop the <em>edit</em></h2>
+        <h2>Browse the <em>deals</em></h2>
         <p id="forYou" class="for-you"></p>
       </div>
       <div id="cats" class="chips"></div>
       <div class="toolbar">
-        <input id="search" type="search" placeholder="Search, e.g. black dress, wide leg, lip oil…">
+        <input id="search" type="search" placeholder="Search deals…">
         <select id="source" title="Store"><option value="">All stores</option></select>
         <select id="sort" title="Sort">
           <option value="score">Picked for me</option>
@@ -93,11 +136,10 @@
   <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
     <form id="profileForm" class="sheet">
       <div class="panel-head">
-        <h2 id="profileTitle">My shopping <em>profile</em></h2>
+        <h2 id="profileTitle">Fine-tune <em>preferences</em></h2>
         <button type="button" class="btn soft small" data-close>Close</button>
       </div>
-      <p class="hint">Store items show when you have a section with their name (Clothes, Jeans, Makeup…). The keywords below sort posts from DealNews and Ben's Bargains (earphones, perfume and makeup deals at big retailers). Saving runs a fresh search.</p>
-      <div class="field"><span>Start from a sample <em>replaces the profile below</em></span><div id="samples" class="sample-row"></div></div>
+      <p class="hint">Everything setup generated, editable directly. Store items show when there is a section with their name (Clothes, Jeans, Makeup…); section keywords sort posts from DealNews and Ben's Bargains. Saving runs a fresh search. <button type="button" class="linkish" id="rerunSetup">Run setup again</button></p>
       <label class="field"><span>About me</span><textarea name="about" rows="2"></textarea></label>
       <label class="field"><span>Brands I love <em>any DealNews or Ben's Bargains deal naming them shows</em></span><textarea name="brands" rows="3"></textarea></label>
       <label class="field"><span>Big stores <em>only their deals that fit a section, or store-wide sales</em></span><textarea name="stores" rows="1"></textarea></label>
@@ -108,12 +150,12 @@
       </div>
       <label class="field"><span>Never show <em>anything mentioning these is hidden</em></span><textarea name="avoid" rows="2"></textarea></label>
       <div class="sheet-foot">
-        <button type="button" class="linkish" id="resetProfile">Reset to default</button>
+        <button type="button" class="linkish" id="resetProfile">Start over</button>
         <button class="btn">Save profile</button>
       </div>
     </form>
   </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

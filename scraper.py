@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+import profiles
 import stores
 
 DB_PATH = Path(__file__).with_name("deals.db")
@@ -30,93 +31,7 @@ FEEDS = {
     "Ben's Bargains": "https://bensbargains.com/rss/",
 }
 
-# Profiles decide what the feed shows. Each one is plain data (editable in the UI, stored in meta.profile):
-#   interests  sections of the feed. Store products (stores.py) arrive pre-classified and show when the
-#              profile has a section with the same name; feed posts are classified by these keywords
-#              (first matching section wins, whole-word match on the title).
-#   brands     a feed post naming one of these lands in "Your brands"; list order also ranks stores in the UI.
-#   stores     multi-brand retailers: their posts show only if they fit a section or read as a store-wide sale.
-#   shops      which store readers' products to show; empty means all of them.
-#   avoid      words that drop an item outright, checked before everything else.
-# Add or edit entries in SAMPLE_PROFILES to ship different starting points; the first one is the default.
-COMMON_AVOID = ["kids", "kid's", "toddler", "baby", "boys", "girls'", "youth", "family",
-                "squishmallow", "squishmallows", "gift card", "egift", "tv", "wall mount",
-                "home", "household", "kitchen", "cookware", "bakeware", "bedding", "sheets", "towel", "towels",
-                "furniture", "mattress", "vacuum", "rug", "decor", "curtain", "storage", "cleaning", "detergent",
-                "paper towels", "toilet", "appliance", "air fryer", "blender", "coffee maker", "lamp",
-                "cigar", "drill", "tool kit", "lawn", "mower", "snow blower", "tire", "tires", "automotive",
-                "fishing", "hunting", "dog", "cat litter", "pet", "grocery", "membership", "cruise", "golf",
-                "energy gel", "gu energy", "gu10", "dried mango", "ebook", "kindle ebook", "sweepstakes"]
-
-SAMPLE_PROFILES = {
-    "Trend-loving twenty-something": {
-        "about": "Mid-20s and into fun, trendy fashion (Zara, H&M, Uniqlo and friends), a good pair of jeans, "
-                 "perfume, soft-glam makeup and wireless earbuds.",
-        "brands": ["Zara", "H&M", "Uniqlo", "Aritzia", "Reformation", "Cotton On", "Gap", "GU", "Abercrombie",
-                   "Madewell", "Free People", "Anthropologie", "J.Crew", "Everlane", "Quince", "& Other Stories",
-                   "Massimo Dutti", "Urban Outfitters", "Princess Polly", "Edikted", "Oh Polly", "Motel Rocks",
-                   "Levi's", "Lulus", "Steve Madden", "Aerie", "Skims", "Parade", "Rare Beauty", "Fenty Beauty",
-                   "Glossier", "Rhode", "Summer Fridays", "Kylie Cosmetics", "Tower 28", "Sol de Janeiro"],
-        "stores": ["Sephora", "Ulta", "Macy's", "Nordstrom"],
-        "shops": [],
-        "interests": [
-            {"name": "Clothes", "keywords": ["zara", "h&m", "uniqlo", "aritzia", "reformation", "cotton on",
-                                             "gap factory", "gap", "gu", "madewell", "free people", "abercrombie",
-                                             "anthropologie", "j.crew", "everlane", "quince", "& other stories",
-                                             "massimo dutti", "urban outfitters", "princess polly", "edikted", "lulus",
-                                             "mango", "women's dress", "women's sweater", "women's jacket"]},
-            {"name": "Jeans", "keywords": ["women's jeans", "levi's women's", "wide leg jeans", "straight leg jeans",
-                                           "mom jeans", "501 curve"]},
-            {"name": "Undergarments", "keywords": ["bra", "bras", "bralette", "lingerie", "underwear", "panties",
-                                                   "thong", "thongs", "aerie", "skims", "parade"]},
-            {"name": "Perfume", "keywords": ["perfume", "eau de parfum", "eau de toilette", "fragrance", "parfum",
-                                             "ysl libre", "miss dior", "gucci flora", "paradoxe", "cloud", "phlur",
-                                             "sol de janeiro", "glossier you", "body mist"]},
-            {"name": "Makeup", "keywords": ["lip balm", "lip tint", "lip gloss", "lip oil", "lipstick", "mascara",
-                                            "foundation", "concealer", "blush", "bronzer", "setting spray",
-                                            "brush set", "makeup", "rhode", "rare beauty", "fenty beauty", "nars",
-                                            "laneige", "summer fridays", "glossier", "tower 28"]},
-            {"name": "Earphones & tech", "keywords": ["airpods", "earbuds", "headphones", "beats",
-                                                      "sony wh-1000xm5", "sony wh-1000xm6"]},
-            {"name": "Skincare", "keywords": ["skincare", "serum", "moisturizer", "sunscreen", "cleanser", "retinol",
-                                              "glow recipe", "drunk elephant", "tatcha"]},
-            {"name": "Shoes & bags", "keywords": ["ballet flats", "ankle boots", "women's boots", "women's sneakers",
-                                                  "steve madden", "ugg", "sam edelman", "purse", "handbag",
-                                                  "crossbody", "kate spade", "tory burch"]},
-            {"name": "Hair tools", "keywords": ["airwrap", "supersonic", "hair dryer", "flat iron", "flexstyle",
-                                                "curling iron", "hair styler"]},
-        ],
-        "avoid": ["men", "men's", "mens", "for men", "for him", "pour homme", "cologne", "boxer", "boxers",
-                  "boxer briefs", "trunks", "perry ellis", "speaker", "trimmer"] + COMMON_AVOID,
-    },
-    "Gadget & self-care minimalist": {
-        "about": "Early 30s, would rather buy one great thing than five okay ones: headphones and gadgets, "
-                 "a simple skincare routine, a signature scent, comfy basics and good sneakers.",
-        "brands": ["Apple", "Sony", "Bose", "Sonos", "Kindle", "Garmin", "Anker", "Dyson", "Uniqlo", "Everlane",
-                   "Quince", "Massimo Dutti", "New Balance", "Hoka", "Veja", "Allbirds", "Glossier",
-                   "Summer Fridays", "Rhode", "Dossier", "Le Labo", "Byredo", "La Roche-Posay", "CeraVe"],
-        "stores": ["Best Buy", "Ulta", "Nordstrom"],
-        "shops": ["Uniqlo", "Massimo Dutti", "Ulta", "Glossier", "Summer Fridays", "Rhode", "Dossier"],
-        "interests": [
-            {"name": "Earphones & tech", "keywords": ["airpods", "earbuds", "headphones", "sony wh-1000xm5",
-                                                      "sony wh-1000xm6", "bose quietcomfort", "sonos", "kindle",
-                                                      "ipad", "macbook", "apple watch", "garmin", "power bank",
-                                                      "magsafe charger"]},
-            {"name": "Skincare", "keywords": ["skincare", "serum", "moisturizer", "sunscreen", "cleanser", "retinol",
-                                              "la roche-posay", "cerave", "summer fridays", "rhode", "lip balm"]},
-            {"name": "Perfume", "keywords": ["perfume", "eau de parfum", "fragrance", "parfum", "le labo", "byredo",
-                                             "dossier", "diptyque", "candle"]},
-            {"name": "Clothes", "keywords": ["uniqlo", "everlane", "quince", "cashmere", "merino", "crewneck",
-                                             "hoodie", "sweatpants", "puffer"]},
-            {"name": "Shoes & bags", "keywords": ["new balance", "hoka", "veja", "allbirds", "on cloud", "sneakers",
-                                                  "running shoes", "backpack", "tote"]},
-            {"name": "Hair tools", "keywords": ["supersonic", "airwrap", "hair dryer", "flat iron"]},
-        ],
-        "avoid": ["refurbished smartwatch band", "screen protector", "phone case"] + COMMON_AVOID,
-    },
-}
-DEFAULT_PROFILE = SAMPLE_PROFILES["Trend-loving twenty-something"]
-
+# What the feed shows is decided by the profile, which is built from setup answers (see profiles.py).
 STORE_SALE_RX = re.compile(r"\b(sale|sitewide|site-wide|event|clearance|extra \d+% off|\d+% off|off \$\d+|code|coupon|gift with purchase|gwp)\b", re.I)
 
 SCHEMA = """
@@ -149,29 +64,6 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
-# Bump when SEED_EVENTS changes; built-in events get replaced, ones you added ("mine") are kept.
-EVENTS_VERSION = 3
-# status: confirmed = announced by the retailer; expected = based on past years, not announced yet.
-SEED_EVENTS = [
-    ("Everyone", "Thanksgiving", "2026-11-26", "2026-11-26", "confirmed", "Most brands start Black Friday pricing online tonight or earlier.", ""),
-    ("Everyone", "Black Friday", "2026-11-27", "2026-11-27", "confirmed", "The big day.", ""),
-    ("Everyone", "Small Business Saturday", "2026-11-28", "2026-11-28", "confirmed", "", ""),
-    ("Everyone", "Cyber Monday", "2026-11-30", "2026-11-30", "confirmed", "Last call for most sitewide codes.", ""),
-    ("Sephora", "Holiday Savings Event", "2026-10-31", "2026-11-10", "expected",
-     "Not announced. Past years ran about Nov 1-11: Rouge 20% off first, then VIB 15% / Insider 10% a few days later. "
-     "Might be live now, so check the app. A good time for prestige makeup, skincare and perfume.",
-     "https://www.sephora.com/beauty/sephora-savings-event"),
-    ("Apple", "Black Friday shopping event", "2026-11-27", "2026-11-30", "expected",
-     "Not announced. Apple usually gives a gift card with purchases instead of cutting prices. "
-     "Amazon and Best Buy usually sell Apple gear for less.", "https://www.apple.com/shop/gifts/shopping-event"),
-    ("Amazon", "Black Friday week", "2026-11-20", "2026-12-01", "expected",
-     "Not announced. Dates are a guess from 2025 (Nov 20 - Dec 1).", "https://www.amazon.com/blackfriday"),
-    ("Best Buy", "Early Black Friday doorbusters", "2026-11-06", "2026-11-18", "confirmed", "Headphone and hair-tool deals show up here.", "https://www.bestbuy.com/site/misc/black-friday/pcmcat225600050002.c"),
-    ("Best Buy", "Black Friday sale", "2026-11-19", "2026-11-28", "confirmed", "", "https://www.bestbuy.com/site/misc/black-friday/pcmcat225600050002.c"),
-    ("Best Buy", "Cyber Monday sale", "2026-11-29", "2026-11-30", "confirmed", "", ""),
-]
-
-
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -186,13 +78,6 @@ def connect():
             conn.execute(f"ALTER TABLE wishlist ADD COLUMN {col} {typ}")
     if "kind" not in {r[1] for r in conn.execute("PRAGMA table_info(deals)")}:
         conn.execute("ALTER TABLE deals ADD COLUMN kind TEXT DEFAULT 'post'")
-    if (get_meta(conn, "events_version") or 0) < EVENTS_VERSION:
-        conn.execute("DELETE FROM events WHERE status != 'mine'")
-        conn.executemany(
-            "INSERT INTO events (retailer, name, start, end, status, note, url) VALUES (?,?,?,?,?,?,?)",
-            SEED_EVENTS,
-        )
-        set_meta(conn, "events_version", EVENTS_VERSION)
     conn.commit()
     return conn
 
@@ -464,7 +349,7 @@ def title_matches(title, query):
 def recompute_matches(conn, wish_ids=None):
     """Rebuild matches + daily lowest prices from scratch, keeping which hits were already notified."""
     wishes = conn.execute("SELECT * FROM wishlist").fetchall()
-    # ~13 months back, so last year's Black Friday prices count as history
+    # ~13 months back, so prices from the same time last year count as history
     cutoff = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
     deals = conn.execute("SELECT id, title, price, posted_at, source, retailer, kind FROM deals WHERE posted_at >= ?",
                          (cutoff,)).fetchall()
@@ -528,7 +413,20 @@ def get_meta(conn, key, default=None):
 # ---------------------------------------------------------------- profile
 
 def get_profile(conn):
-    return get_meta(conn, "profile") or DEFAULT_PROFILE
+    """The active profile, or None until setup has been completed."""
+    return get_meta(conn, "profile")
+
+
+def apply_profile(conn, answers):
+    """Build and save a profile from setup answers, and load the chosen sale-date preset (if any).
+    Events added by hand (status 'mine') are kept."""
+    profile = profiles.build_profile(answers)
+    set_meta(conn, "profile", profile)
+    conn.execute("DELETE FROM events WHERE status != 'mine'")
+    conn.executemany("INSERT INTO events (retailer, name, start, end, status, note, url) VALUES (?,?,?,?,?,?,?)",
+                     profiles.SALE_DATE_PRESETS.get(answers.get("sale_dates") or "", []))
+    conn.commit()
+    return profile
 
 
 _rx_cache = {}
@@ -578,6 +476,10 @@ def check_wish_page(conn, wish):
 
 
 def run_scrape(conn, only_wish_id=None, log=print):
+    profile = get_profile(conn)
+    if profile is None:
+        log("no profile yet; finish setup in the UI first")
+        return 0
     status = get_meta(conn, "sources", {})
     if only_wish_id is None:
         for name, url in FEEDS.items():
@@ -599,7 +501,11 @@ def run_scrape(conn, only_wish_id=None, log=print):
             time.sleep(REQUEST_GAP_S)
 
     if only_wish_id is None:
-        for name, read in stores.readers():
+        shops = set(profile.get("shops") or [])
+        for name, emits, read in stores.readers(profile.get("department", "all")):
+            if shops and not shops & set(emits):
+                status.pop(name, None)  # not part of this profile
+                continue
             try:
                 try:
                     found = read(fetch, now_iso(), REQUEST_GAP_S)

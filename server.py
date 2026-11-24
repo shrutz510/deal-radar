@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import profiles
 import scraper
 import stores
 
@@ -29,10 +30,21 @@ def rows(sql, args=()):
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
-LAST_BF_WINDOW = ("2025-11-01", "2025-12-05")  # last year's Black Friday season
+def last_season_window(profile):
+    """Dates around the countdown date one year earlier, e.g. last year's Black Friday season."""
+    date = ((profile or {}).get("countdown") or {}).get("date")
+    if not date:
+        return None
+    try:
+        d = datetime.fromisoformat(date)
+    except ValueError:
+        return None
+    d = d.replace(year=d.year - 1)
+    return (d - timedelta(days=26)).date().isoformat(), (d + timedelta(days=8)).date().isoformat()
 
 
-def wishlist_view():
+def wishlist_view(profile):
+    window = last_season_window(profile)
     out = []
     recent = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
     for w in rows("SELECT * FROM wishlist ORDER BY priority, created_at DESC"):
@@ -43,8 +55,8 @@ def wishlist_view():
             d["used"] = scraper.is_used(d["title"])
         priced = [d for d in matches if d["price"] and not d["used"]]
         current = [d for d in priced if (d["last_seen"] if d["kind"] == "product" else d["posted_at"]) >= recent]
-        last_season = [d for d in priced if LAST_BF_WINDOW[0] <= d["posted_at"][:10] <= LAST_BF_WINDOW[1]]
-        last_bf = min(last_season, key=lambda d: d["price"]) if last_season else None
+        last_season = [d for d in priced if window and window[0] <= d["posted_at"][:10] <= window[1]]
+        last_year = min(last_season, key=lambda d: d["price"]) if last_season else None
         best_now = min(current, key=lambda d: d["price"]) if current else None
         history = rows("SELECT day, price, source FROM price_points WHERE wish_id=? ORDER BY day", (w["id"],))
         lowest = min((h["price"] for h in history), default=None)
@@ -67,7 +79,7 @@ def wishlist_view():
             status = "watching"
         out.append({**w, "matches": matches[:12], "match_count": len(matches), "best_now": best_now,
                     "now_price": now_price, "lowest": lowest, "history": history, "status": status,
-                    "last_bf": last_bf})
+                    "last_year": last_year})
     return out
 
 
@@ -86,6 +98,8 @@ def unit_price(title):
 
 def deals_view(profile):
     """Recent deals that fit the profile (or match a wishlist item); everything else is dropped."""
+    if profile is None:
+        return []
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=FEED_DAYS)).isoformat()
     seen = (now - timedelta(hours=PRODUCT_STALE_H)).isoformat()
@@ -131,10 +145,17 @@ def state():
         profile = scraper.get_profile(conn)
         return {
             "profile": profile,
-            "samples": list(scraper.SAMPLE_PROFILES),
-            "shops": stores.STORE_NAMES,
+            "needs_setup": profile is None,
+            # everything the setup form offers
+            "setup_options": {
+                "departments": profiles.DEPARTMENTS,
+                "categories": profiles.CATEGORIES,
+                "stores": stores.STORE_INFO,
+                "presets": profiles.PRESETS,
+                "sale_dates": list(profiles.SALE_DATE_PRESETS),
+            },
             "events": rows("SELECT * FROM events ORDER BY start"),
-            "wishlist": wishlist_view(),
+            "wishlist": wishlist_view(profile),
             "deals": deals_view(profile),
             "meta": {
                 "feed_days": FEED_DAYS,
@@ -179,7 +200,7 @@ def scheduler():
     while True:
         last = scraper.get_meta(conn, "last_refresh")
         due = not last or (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() > REFRESH_EVERY_S
-        if due:
+        if due and scraper.get_profile(conn) is not None:
             refresh()
         time.sleep(60)
 
@@ -256,10 +277,16 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"error": "not found"}, 404)
 
     def do_PUT(self):
+        if self.path == "/api/setup":
+            with db_lock:
+                scraper.apply_profile(conn, self.body())
+            refresh()
+            return self.send_json({"ok": True})
         if self.path == "/api/profile":
+            # fine-tuning of an existing profile; fields the form doesn't edit (title, department, ...) are kept
             b = self.body()
             clean = lambda xs: [x.strip() for x in xs if isinstance(x, str) and x.strip()]
-            profile = {
+            profile = {**(scraper.get_profile(conn) or {}),
                 "about": str(b.get("about") or "")[:500],
                 "brands": clean(b.get("brands") or []),
                 "stores": clean(b.get("stores") or []),
@@ -272,13 +299,6 @@ class Handler(SimpleHTTPRequestHandler):
             with db_lock:
                 scraper.set_meta(conn, "profile", profile)
             refresh()  # run the new brand searches
-            return self.send_json({"ok": True})
-        if self.path == "/api/profile/sample":
-            sample = scraper.SAMPLE_PROFILES.get(self.body().get("name"))
-            if not sample:
-                return self.send_json({"error": "no such sample"}, 404)
-            with db_lock:
-                scraper.set_meta(conn, "profile", sample)
             return self.send_json({"ok": True})
         if self.path == "/api/profile/reset":
             with db_lock:
