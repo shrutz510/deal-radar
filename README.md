@@ -12,7 +12,7 @@ A self-hosted deal finder you configure for yourself. On first run it asks what 
 
 It then builds the app from your answers: a feed of products and prices collected from retailer websites and deal feeds, a wishlist that tracks target prices, and a sale-date calendar.
 
-- Python 3.9+ standard library only: no dependencies, no build step
+- Python 3.10+ standard library only: no dependencies, no build step
 - SQLite storage, a JSON API and a vanilla-JS front end
 - Setup-driven: nothing about the user is hard-coded; profiles are data built from setup answers
 - Pluggable store readers; adding a Shopify store is one line
@@ -196,7 +196,7 @@ Settings can also come from the environment: `DEAL_RADAR_DB`, `DEAL_RADAR_HOST` 
 | Job | What it checks |
 |---|---|
 | Lint | `ruff check` |
-| Tests | the unit and API tests on Python 3.9 to 3.13 |
+| Tests | the unit and API tests on Python 3.10 to 3.13 |
 | Front end syntax | `node --check` on every module |
 | Smoke test | starts the real server on an empty database and checks the API and UI respond |
 | Docker | builds the image, runs it until its healthcheck passes |

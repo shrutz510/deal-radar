@@ -104,7 +104,7 @@ def _zara_find(ids, pattern):
     """Category id for a path, where pattern elements are names or compiled regexes."""
     for path, cid in ids.items():
         if len(path) == len(pattern) and all(p.search(x) if hasattr(p, "search") else p == x
-                                             for p, x in zip(pattern, path)):
+                                             for p, x in zip(pattern, path, strict=True)):
             return cid
     return None
 

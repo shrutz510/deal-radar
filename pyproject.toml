@@ -2,12 +2,12 @@
 name = "deal-radar"
 version = "1.0.0"
 description = "Self-hosted deal finder you configure on first run. Python standard library only."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []
 
 [tool.ruff]
 line-length = 130
-target-version = "py39"
+target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.lint]

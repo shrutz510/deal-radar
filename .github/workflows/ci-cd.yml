@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -157,5 +157,5 @@ jobs:
 
               docker run -p 8787:8787 -v deal-radar:/data ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME#v}
 
-          or from source with \`python3 src/server.py\` (Python 3.9+, no dependencies).
+          or from source with \`python3 src/server.py\` (Python 3.10+, no dependencies).
           NOTES
