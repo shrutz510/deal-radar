@@ -20,8 +20,9 @@ It then builds the app from your answers: a feed of products and prices collecte
 ```bash
 git clone https://github.com/shrutz510/deal-radar.git
 cd deal-radar
-python3 server.py              # serves http://localhost:8787 and opens a browser
-python3 server.py --no-browser
+python3 src/server.py              # serves http://localhost:8787 and opens a browser
+python3 src/server.py --no-browser
+DEAL_RADAR_DB=other.db python3 src/server.py   # use a different data file (e.g. one per person)
 ```
 
 The first visit opens the setup screen. Answer the questions or start from a preset, then click **Build my deal finder**. The first refresh starts immediately and takes a minute or two. Nothing is fetched until setup is done.
@@ -34,13 +35,13 @@ To change your answers later, open **Preferences → Run setup again**. **Start 
  setup answers ──build_profile()──> profile (meta table)
                                        │ department, shops
  store readers (stores.py) ─┐          ▼
- RSS feeds (scraper.py) ────┼─> upsert into deals ─> recompute wishlist matches ─> notify on target hits
+ RSS feeds (feeds.py) ──────┼─> refresh.py: upsert into deals ─> wishlist.recompute() ─> notify on target hits
  wishlist product pages ────┘            │
                                          ▼
-           server.py: /api/state = deals filtered by the profile + wishlist + events + setup options
+           views.py: /api/state = deals filtered by the profile + wishlist + events + setup options
                                          │
                                          ▼
-                            static/: index.html, app.js, styles.css
+                      static/: index.html, styles.css, js/*.js
 ```
 
 1. **Setup.** The UI posts the answers to `PUT /api/setup`. `profiles.build_profile()` turns them into a profile:
@@ -49,27 +50,34 @@ To change your answers later, open **Preferences → Run setup again**. **Start 
    - the countdown
 
    The answers are stored on the profile under `setup`, so the form can reopen pre-filled. A chosen sale-date preset is loaded into `events`.
-2. **Collect.** `scraper.run_scrape()` runs on a background scheduler (every 30 minutes by default) or on `POST /api/refresh`. It reads:
+2. **Collect.** `refresh.run()` runs on a background scheduler (every 30 minutes by default) or on `POST /api/refresh`. It reads:
    - **RSS feeds** listed in `FEEDS`
    - **the store readers the profile selected**, for the profile's department
    - **wishlist product pages** that have a URL, using Shopify product JSON, then schema.org JSON-LD, then price meta tags
 3. **Store.** Every item is upserted into `deals` by `guid`. Feed posts have `kind = 'post'`; store items have `kind = 'product'` and arrive pre-classified into a section.
-4. **Match.** `recompute_matches()` matches every item against each wishlist query and records a daily lowest price per item. When a fresh match reaches its target price, `notify_new_hits()` sends a desktop notification (macOS `osascript`; a no-op elsewhere).
-5. **Filter at read time.** `server.deals_view()` applies the profile on every `/api/state` call, so edits take effect without a re-scrape:
-   - **Feed posts** are classified by `scraper.profile_section()`.
+4. **Match.** `wishlist.recompute()` matches every item against each wishlist query and records a daily lowest price per item. When a fresh match reaches its target price, `wishlist.notify_hits()` sends a desktop notification (macOS `osascript`; a no-op elsewhere).
+5. **Filter at read time.** `views.deals()` applies the profile on every `/api/state` call through `profiles.section_for()`, so edits take effect without a re-scrape:
+   - **Feed posts** are classified by their titles.
    - **Store products** show when the profile has a section of the same name and they come from a selected store.
    - Anything matching an `avoid` word is dropped.
 6. **Expire.** A product not seen for `PRODUCT_STALE_H` hours is hidden, because the store stopped listing it. Feed posts stay for `FEED_DAYS`.
 
 ### Files
+Everything lives in `src/`; the data file `deals.db` sits at the repo root.
 
 | File | What's in it |
 |---|---|
-| `profiles.py` | Setup → profile: category catalog and keywords, department rules, default avoid list, sale-date presets, example presets |
-| `stores.py` | Store readers, store metadata (`STORE_INFO`) and the product classifier |
-| `scraper.py` | DB schema and migrations, RSS parsers, price parsing, product-page price checks, wishlist matching, profile storage, `run_scrape()` |
-| `server.py` | HTTP server, JSON API, feed and wishlist views, scoring, refresh queue and scheduler |
-| `static/` | Single-page UI (setup screen, feed, wishlist, calendar), no framework |
+| `server.py` | Entry point: route table for the JSON API, static files, refresh scheduler |
+| `config.py` | Every tunable setting (port, intervals, delays, data path) |
+| `profiles.py` | Setup → profile: category catalog and keywords, department rules, avoid lists, presets, sale-date presets; `section_for()` decides where an item shows |
+| `stores.py` | Store readers, `STORE_INFO` and the product classifier |
+| `feeds.py` | Deal-site RSS parsers and price parsing for free-text titles |
+| `refresh.py` | One refresh run (feeds, stores, product pages, matching) and the background `Refresher` |
+| `wishlist.py` | Wishlist matching, price history, alerts, product-page price checks |
+| `views.py` | Builds `/api/state`: filtered feed, wishlist status, scoring |
+| `db.py` | SQLite schema, migrations, shared helpers |
+| `net.py` | The single HTTP helper (`fetch`) |
+| `static/` | `index.html`, `styles.css` and ES modules in `js/`: `main.js` (load/render, top bar, theme), `feed.js`, `wishlist.js`, `calendar.js`, `setup.js`, `prefs.js`, `util.js`. No build step |
 
 ## Customizing
 
@@ -123,7 +131,7 @@ Ways to add a store:
 Readers use only public, unauthenticated endpoints with the honest `USER_AGENT`. When a store answers 403 or 429, the refresh records it in the status shown in the UI and moves on. 429s get one retry after `Retry-After`, capped at 15 seconds. Don't add header spoofing or other workarounds. Some stores block automated clients entirely, and Shopify may refuse non-browser clients for a while.
 
 ### Feeds
-`FEEDS` in `scraper.py` maps a source name to an RSS URL, with a parser in `PARSERS`. Each parser returns dicts in the shape `finish()` produces. Helpers handle the messy parts of deal titles:
+`FEEDS` in `feeds.py` maps a source name to `(rss_url, parser)`. Each parser returns item dicts built with `post()`, which fills in the original price, discount and coupon code. Helpers handle the messy parts of deal titles:
 - `title_price()` skips shipping and spend thresholds
 - `find_orig_price()` finds the original price
 - `find_percent()` finds the discount
@@ -135,16 +143,17 @@ Readers use only public, unauthenticated endpoints with the honest `USER_AGENT`.
 
 | Constant | Where | Default |
 |---|---|---|
-| `PORT` | server.py | 8787 |
-| `REFRESH_EVERY_S` | server.py | 30 min |
-| `FEED_DAYS` | server.py | 14 (how long feed posts stay visible) |
-| `PRODUCT_STALE_H` | server.py | 26 (hours before an unseen product is hidden) |
-| `REQUEST_GAP_S` / `STORE_GAP_S` | scraper.py | 1.5 s / 5 s between requests and between stores |
+| `PORT` | config.py | 8787 |
+| `REFRESH_EVERY_S` | config.py | 30 min |
+| `FEED_DAYS` | config.py | 14 (how long feed posts stay visible) |
+| `PRODUCT_STALE_H` | config.py | 26 (hours before an unseen product is hidden) |
+| `REQUEST_GAP_S` / `STORE_GAP_S` | config.py | 1.5 s / 5 s between requests and between stores |
+| `RETRY_AFTER_MAX_S` | config.py | 15 s, the longest wait before retrying a rate-limited store |
 | `NEW_PER_STORE` | stores.py | 10 full-price items per Shopify store |
 | `UNIQLO_KEEP` | stores.py | 40 newest items per department |
-| `PAGE` | static/app.js | 24 items per "Show more" |
+| `PAGE` | static/js/feed.js | 24 items per "Show more" |
 
-Scoring (`server.deal_score`) weights the discount, community votes (feeds only) and freshness. The UI's default sort takes turns between stores, so one big sale can't fill the page.
+Scoring (`views.score`) weights the discount, staff picks (feeds only) and freshness. The UI's default sort takes turns between stores, so one big sale can't fill the page.
 
 ## API
 
@@ -170,7 +179,7 @@ All JSON. The server binds to `127.0.0.1` only.
 - Accessories (`NOISE_WORDS`) and used/refurbished listings (`USED_RE`) never count as the best price
 
 ## Data model
-SQLite tables, created and migrated in `scraper.connect()`:
+SQLite tables, created and migrated in `db.connect()`:
 
 | Table | Holds |
 |---|---|

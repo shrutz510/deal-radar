@@ -17,7 +17,11 @@ Profile fields (stored as JSON in meta.profile):
   shops       store readers to use; empty means all
   avoid       words that drop any item, checked first
 """
-from stores import (CLOTHES, HAIR, JEANS, MAKEUP, PERFUME, SHOES, SKIN, TECH, UNDER)
+import re
+from functools import lru_cache
+
+from db import set_meta
+from stores import CLOTHES, HAIR, JEANS, MAKEUP, PERFUME, SHOES, SKIN, TECH, UNDER
 
 DEPARTMENTS = {"women": "Women's", "men": "Men's", "all": "Everyone"}
 
@@ -104,6 +108,57 @@ def build_profile(answers):
                  + _words(answers.get("avoid")),
         "setup": answers,
     }
+
+
+def save_setup(conn, answers):
+    """Build and store the profile, and load the chosen sale-date preset. Hand-added events are kept."""
+    set_meta(conn, "profile", build_profile(answers))
+    conn.execute("DELETE FROM events WHERE status != 'mine'")
+    conn.executemany("INSERT INTO events (retailer, name, start, end, status, note, url) VALUES (?,?,?,?,?,?,?)",
+                     SALE_DATE_PRESETS.get(answers.get("sale_dates") or "", []))
+    conn.commit()
+
+
+# ---------------------------------------------------------------- matching items against a profile
+
+STORE_SALE_RX = re.compile(r"\b(sale|sitewide|site-wide|event|clearance|extra \d+% off|\d+% off|off \$\d+|code|coupon|"
+                           r"gift with purchase|gwp)\b", re.I)
+
+
+@lru_cache(maxsize=256)
+def words_rx(words):
+    """Whole-word, case-insensitive regex for a tuple of words/phrases (None if empty)."""
+    alts = "|".join(re.escape(w.strip().lower()) for w in words if w.strip())
+    return re.compile(rf"(?<![\w'])(?:{alts})(?![\w])", re.I) if alts else None
+
+
+def _hits(words, text):
+    rx = words_rx(tuple(words or []))
+    return bool(rx and rx.search(text))
+
+
+def section_for(profile, item):
+    """The feed section an item belongs to for this profile, or None if the profile filters it out.
+
+    Store products arrive classified: they show when the profile has that section and browses that store.
+    Deal-feed posts are classified here: first section whose keywords hit the title, then "Your brands",
+    then "Store sales" (a listed retailer plus sale wording). "Never show" words veto either kind."""
+    title = item["title"].replace("\u2019", "'")  # curly apostrophes: Men’s -> Men's
+    if _hits(profile.get("avoid"), title):
+        return None
+    if item["kind"] == "product":
+        shops = {s.lower() for s in profile.get("shops") or []}
+        sections = {i["name"] for i in profile.get("interests", [])}
+        ok = item["category"] in sections and (not shops or (item["retailer"] or "").lower() in shops)
+        return item["category"] if ok else None
+    for interest in profile.get("interests", []):
+        if _hits(interest.get("keywords"), title):
+            return interest["name"]
+    if _hits(profile.get("brands"), title):  # title only: a seller match would pull in a whole department store
+        return "Your brands"
+    if _hits(profile.get("stores"), title) and STORE_SALE_RX.search(title):
+        return "Store sales"
+    return None
 
 
 # Built-in sale calendars a setup can load; events added in the UI are never touched.

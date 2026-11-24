@@ -5,8 +5,8 @@ A reader is a function (fetch, ts, pause, dept) -> list of product dicts:
   ts                   ISO timestamp to use as posted_at for new items
   pause                seconds to sleep between requests inside one reader
   dept                 "women" | "men" | "all", from the profile; read only the matching departments
-Build each dict with product(); it fills the same fields scraper.upsert_deals stores for feed posts,
-plus kind="product" and a section from classify(). Register the reader in readers() and describe the
+Build each dict with product(); it fills the fields db.upsert_items stores, with kind="product" and a
+section from classify(). Register the reader in readers() and describe the
 store(s) in STORE_INFO (what they sell and for whom; setup uses it to suggest stores). Shopify stores
 need no reader code: add a row to SHOPIFY and to STORE_INFO.
 
@@ -66,8 +66,7 @@ def product(store, pid, title, url, image, price, regular, section, posted_at):
         "title": nice(title), "url": url, "image": image, "category": section,
         "price": price, "orig_price": regular if on_sale else None,
         "discount_pct": round(100 * (1 - price / regular), 1) if on_sale else None,
-        "popularity": 0, "staff_pick": 0, "summary": "", "coupon": None,
-        "posted_at": posted_at, "frontpage": 1,
+        "posted_at": posted_at,
     }
 
 
