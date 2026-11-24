@@ -347,7 +347,7 @@ pform.addEventListener("submit", async (ev) => {
 /* ---------- misc ---------- */
 $("#refreshBtn").addEventListener("click", async () => { await api("/api/refresh", { method: "POST" }); load(); });
 
-// theme: automatic (follows the Mac) -> light -> dark
+// theme: auto (follows the OS setting) -> light -> dark; stored in localStorage
 const THEMES = { auto: ["◐", "Auto"], light: ["☀", "Light"], dark: ["☾", "Dark"] };
 function setTheme(t) {
   if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;

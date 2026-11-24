@@ -1,4 +1,4 @@
-"""Deal Radar local server: JSON API + static UI + background refresh.
+"""Deal Radar server: JSON API, static UI and a background refresh scheduler (stdlib only).
 
 Run:  python3 server.py   then open http://localhost:8787
 """

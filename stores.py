@@ -1,15 +1,22 @@
-"""Products straight from store websites (no deal-aggregator posts).
+"""Store readers: products straight from retailer websites.
 
-Each reader returns product dicts shaped like a scraped deal (see scraper.upsert_deals), with
-kind="product" and a section already chosen. Only public, unauthenticated endpoints are used, with the
-same honest User-Agent as everything else; a store that answers 403 is reported, not worked around.
+A reader is a function (fetch, ts, pause) -> list of product dicts:
+  fetch(url) -> bytes  shared HTTP helper (honest User-Agent, timeout); raise on HTTP errors
+  ts                   ISO timestamp to use as posted_at for new items
+  pause                seconds to sleep between requests inside one reader
+Build each dict with product(); it fills the same fields scraper.upsert_deals stores for feed posts,
+plus kind="product" and a section from classify(). Register the reader in readers() and its store
+name(s) in STORE_NAMES. Shopify stores need no code: add a row to SHOPIFY.
+
+Only public, unauthenticated endpoints are used. A store that refuses (403/429) is reported in the
+refresh status and skipped; readers must not try to get around blocking.
 """
 import json
 import re
 import time
 import urllib.parse
 
-# Sections a product can land in; the default profile uses the same names.
+# Sections a product can land in. Profiles must use these exact names for store products to show.
 JEANS, CLOTHES, UNDER, PERFUME, MAKEUP, SKIN, SHOES, TECH, HAIR = (
     "Jeans", "Clothes", "Undergarments", "Perfume", "Makeup", "Skincare", "Shoes & bags", "Earphones & tech", "Hair tools")
 
@@ -228,12 +235,12 @@ def read_shopify(name, domain, fallback, fetch, ts, pause):
     return out
 
 
-# Every store name a product can carry (Massimo Dutti comes from the Zara reader).
+# Every store name a product can carry; one reader may emit several (Zara also yields Massimo Dutti).
 STORE_NAMES = ["Zara", "Massimo Dutti", "Uniqlo", "Ulta"] + [name for name, _, _ in SHOPIFY]
 
 
 def readers():
-    """(store name, function(fetch, ts, pause) -> products) for every store we read."""
+    """Yields (status name, reader) pairs; the refresh runs them in order with a pause between stores."""
     yield "Zara", read_zara
     yield "Uniqlo", read_uniqlo
     yield "Ulta", read_ulta

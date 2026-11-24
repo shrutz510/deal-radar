@@ -1,4 +1,4 @@
-"""Deal scraping + storage for Deal Radar.
+"""Data collection and storage for Deal Radar.
 
 Reads products straight from store websites (stores.py: Zara, Uniqlo, Ulta, Shopify brands), pulls the
 DealNews and Ben's Bargains RSS feeds for big-retailer deals (earphones, perfume, makeup), and optionally
@@ -30,10 +30,15 @@ FEEDS = {
     "Ben's Bargains": "https://bensbargains.com/rss/",
 }
 
-# Who the feed is for. Editable in the UI (Profile); these samples are only starting points.
-# Store products (stores.py) arrive already sorted into section names, and show when the profile has a
-# section of that name (and, if "shops" is set, only from those stores). The keywords sort deal-site posts
-# (DealNews, Ben's Bargains), so they stay brand- and product-led to keep noise out.
+# Profiles decide what the feed shows. Each one is plain data (editable in the UI, stored in meta.profile):
+#   interests  sections of the feed. Store products (stores.py) arrive pre-classified and show when the
+#              profile has a section with the same name; feed posts are classified by these keywords
+#              (first matching section wins, whole-word match on the title).
+#   brands     a feed post naming one of these lands in "Your brands"; list order also ranks stores in the UI.
+#   stores     multi-brand retailers: their posts show only if they fit a section or read as a store-wide sale.
+#   shops      which store readers' products to show; empty means all of them.
+#   avoid      words that drop an item outright, checked before everything else.
+# Add or edit entries in SAMPLE_PROFILES to ship different starting points; the first one is the default.
 COMMON_AVOID = ["kids", "kid's", "toddler", "baby", "boys", "girls'", "youth", "family",
                 "squishmallow", "squishmallows", "gift card", "egift", "tv", "wall mount",
                 "home", "household", "kitchen", "cookware", "bakeware", "bedding", "sheets", "towel", "towels",
@@ -47,15 +52,13 @@ SAMPLE_PROFILES = {
     "Trend-loving twenty-something": {
         "about": "Mid-20s and into fun, trendy fashion (Zara, H&M, Uniqlo and friends), a good pair of jeans, "
                  "perfume, soft-glam makeup and wireless earbuds.",
-        # A deal-site post whose title names one of these shows under "Your brands".
         "brands": ["Zara", "H&M", "Uniqlo", "Aritzia", "Reformation", "Cotton On", "Gap", "GU", "Abercrombie",
                    "Madewell", "Free People", "Anthropologie", "J.Crew", "Everlane", "Quince", "& Other Stories",
                    "Massimo Dutti", "Urban Outfitters", "Princess Polly", "Edikted", "Oh Polly", "Motel Rocks",
                    "Levi's", "Lulus", "Steve Madden", "Aerie", "Skims", "Parade", "Rare Beauty", "Fenty Beauty",
                    "Glossier", "Rhode", "Summer Fridays", "Kylie Cosmetics", "Tower 28", "Sol de Janeiro"],
-        # Big multi-brand stores: their posts only show when they also fit a section, or are a store-wide sale.
         "stores": ["Sephora", "Ulta", "Macy's", "Nordstrom"],
-        "shops": [],  # empty = browse every store
+        "shops": [],
         "interests": [
             {"name": "Clothes", "keywords": ["zara", "h&m", "uniqlo", "aritzia", "reformation", "cotton on",
                                              "gap factory", "gap", "gu", "madewell", "free people", "abercrombie",
@@ -83,7 +86,6 @@ SAMPLE_PROFILES = {
             {"name": "Hair tools", "keywords": ["airwrap", "supersonic", "hair dryer", "flat iron", "flexstyle",
                                                 "curling iron", "hair styler"]},
         ],
-        # Anything mentioning these is dropped, even if it matched above.
         "avoid": ["men", "men's", "mens", "for men", "for him", "pour homme", "cologne", "boxer", "boxers",
                   "boxer briefs", "trunks", "perry ellis", "speaker", "trimmer"] + COMMON_AVOID,
     },
@@ -184,10 +186,6 @@ def connect():
             conn.execute(f"ALTER TABLE wishlist ADD COLUMN {col} {typ}")
     if "kind" not in {r[1] for r in conn.execute("PRAGMA table_info(deals)")}:
         conn.execute("ALTER TABLE deals ADD COLUMN kind TEXT DEFAULT 'post'")
-    # Slickdeals is no longer a source; clear out anything it left behind.
-    conn.execute("DELETE FROM wish_matches WHERE deal_id IN (SELECT id FROM deals WHERE source='Slickdeals')")
-    conn.execute("DELETE FROM price_points WHERE source='Slickdeals'")
-    conn.execute("DELETE FROM deals WHERE source='Slickdeals'")
     if (get_meta(conn, "events_version") or 0) < EVENTS_VERSION:
         conn.execute("DELETE FROM events WHERE status != 'mine'")
         conn.executemany(
@@ -545,7 +543,7 @@ def _words_rx(words):
 
 
 def profile_section(profile, title, retailer=""):
-    """Which profile section a deal belongs to, or None if it isn't for this person."""
+    """Which profile section a feed post belongs to, or None if the profile filters it out."""
     title = title.replace("\u2019", "'")  # curly apostrophes: Men’s -> Men's
     avoid = _words_rx(profile.get("avoid", []))
     if avoid and avoid.search(title):
@@ -625,8 +623,6 @@ def run_scrape(conn, only_wish_id=None, log=print):
                 status[name] = {"ok": False, "error": f"{type(e).__name__}: {e}"[:200], "at": now_iso(), "store": True}
                 log(f"{name}: FAILED {e}")
             time.sleep(STORE_GAP_S)
-        status.pop("Slickdeals", None)
-        status.pop("Brand searches", None)
 
     recompute_matches(conn)
     hits = notify_new_hits(conn)
