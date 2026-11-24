@@ -15,7 +15,7 @@ import db
 import profiles
 import views
 import wishlist
-from config import PORT, REFRESH_EVERY_S, STATIC_DIR
+from config import HOST, PORT, REFRESH_EVERY_S, STATIC_DIR
 from refresh import Refresher
 
 conn = db.connect()
@@ -192,4 +192,4 @@ if __name__ == "__main__":
     print(f"Deal Radar running at {url}  (refresh every {REFRESH_EVERY_S // 60} min, Ctrl+C to stop)")
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

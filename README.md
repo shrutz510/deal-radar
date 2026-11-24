@@ -1,5 +1,7 @@
 # Deal Radar
 
+[![CI/CD](https://github.com/shrutz510/deal-radar/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/shrutz510/deal-radar/actions/workflows/ci-cd.yml)
+
 A self-hosted deal finder you configure for yourself. On first run it asks what you shop for:
 - who you're shopping for
 - categories
@@ -23,6 +25,12 @@ cd deal-radar
 python3 src/server.py              # serves http://localhost:8787 and opens a browser
 python3 src/server.py --no-browser
 DEAL_RADAR_DB=other.db python3 src/server.py   # use a different data file (e.g. one per person)
+```
+
+Or run the published container image (data is kept in the `deal-radar` volume):
+
+```bash
+docker run -p 8787:8787 -v deal-radar:/data ghcr.io/shrutz510/deal-radar:latest
 ```
 
 The first visit opens the setup screen. Answer the questions or start from a preset, then click **Build my deal finder**. The first refresh starts immediately and takes a minute or two. Nothing is fetched until setup is done.
@@ -171,6 +179,35 @@ All JSON. The server binds to `127.0.0.1` only.
 | DELETE | `/api/wishlist/<id>` | |
 | POST | `/api/events` | `{retailer, name, start, end?, note?, url?}` |
 | DELETE | `/api/events/<id>` | Deletes any event (the UI only offers it for events added by hand) |
+
+## Development
+
+```bash
+python3 -m unittest discover -s tests -t .     # tests: no network, temp database
+uvx ruff check src tests                        # lint (config in pyproject.toml)
+for f in src/static/js/*.js; do node --check "$f"; done   # front-end syntax (Node 22+)
+```
+
+Settings can also come from the environment: `DEAL_RADAR_DB`, `DEAL_RADAR_HOST` (use `0.0.0.0` in a container) and `DEAL_RADAR_PORT`.
+
+### CI/CD
+`.github/workflows/ci-cd.yml` runs on every push and pull request:
+
+| Job | What it checks |
+|---|---|
+| Lint | `ruff check` |
+| Tests | the unit and API tests on Python 3.9 to 3.13 |
+| Front end syntax | `node --check` on every module |
+| Smoke test | starts the real server on an empty database and checks the API and UI respond |
+| Docker | builds the image, runs it until its healthcheck passes |
+
+When all of those pass on `main`, the image is published to `ghcr.io/shrutz510/deal-radar` (`latest` plus the commit SHA) for amd64 and arm64. To cut a release, push a version tag:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+That publishes the image as `1.1.0` and `1.1`, then creates a GitHub Release with generated notes. Dependabot keeps the workflow actions and the base image up to date.
 
 ## Wishlist queries
 - Every word must appear in the item name. For store products, the store name counts as part of the name: `uniqlo wide leg jeans`

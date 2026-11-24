@@ -165,7 +165,8 @@ def section_for(profile, item):
 # status: confirmed = announced by the retailer; expected = based on past years, not announced yet.
 SALE_DATE_PRESETS = {
     "US Black Friday 2026": [
-        ("Everyone", "Thanksgiving", "2026-11-26", "2026-11-26", "confirmed", "Many stores start Black Friday pricing online tonight or earlier.", ""),
+        ("Everyone", "Thanksgiving", "2026-11-26", "2026-11-26", "confirmed",
+         "Many stores start Black Friday pricing online tonight or earlier.", ""),
         ("Everyone", "Black Friday", "2026-11-27", "2026-11-27", "confirmed", "", ""),
         ("Everyone", "Small Business Saturday", "2026-11-28", "2026-11-28", "confirmed", "", ""),
         ("Everyone", "Cyber Monday", "2026-11-30", "2026-11-30", "confirmed", "Last call for most sitewide codes.", ""),

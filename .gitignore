@@ -3,3 +3,4 @@ deals.db
 deals.db-*
 __pycache__/
 .DS_Store
+.ruff_cache/

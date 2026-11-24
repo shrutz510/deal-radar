@@ -1,0 +1,161 @@
+name: CI/CD
+
+# CI on every push and pull request; CD (container image, release) only after CI passes on main or a v* tag.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff==0.8.4
+      - run: ruff check src tests
+
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -t . -v
+
+  frontend:
+    name: Front end syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: for f in src/static/js/*.js; do node --check "$f"; done
+
+  smoke:
+    name: Smoke test (real server)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Start the server on an empty database and check it answers
+        env:
+          DEAL_RADAR_DB: ${{ runner.temp }}/smoke.db
+        run: |
+          python src/server.py --no-browser > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8787/api/state -o state.json && break; sleep 1; done
+          python -c "import json; s = json.load(open('state.json')); assert s['needs_setup'] is True and s['deals'] == [], s"
+          curl -fsS http://127.0.0.1:8787/ | grep -q 'js/main.js'
+          curl -fsS http://127.0.0.1:8787/js/main.js -o /dev/null
+      - if: failure()
+        run: cat server.log
+
+  docker:
+    name: Docker image builds and runs
+    needs: [lint, test, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: deal-radar:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run the container until its healthcheck passes
+        run: |
+          docker run -d --name dr -p 8787:8787 deal-radar:ci
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' dr)" = healthy ] && break; sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' dr | grep -q healthy
+          curl -fsS http://127.0.0.1:8787/api/state | grep -q needs_setup
+      - if: failure()
+        run: docker logs dr
+
+  # ---------------------------------------------------------------- CD
+
+  publish-image:
+    name: Publish image to GHCR
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [lint, test, frontend, smoke, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: publish-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "Deal Radar $GITHUB_REF_NAME" \
+            --notes-file - <<NOTES
+          Run it with Docker:
+
+              docker run -p 8787:8787 -v deal-radar:/data ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME#v}
+
+          or from source with \`python3 src/server.py\` (Python 3.9+, no dependencies).
+          NOTES

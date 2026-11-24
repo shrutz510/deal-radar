@@ -7,7 +7,8 @@ SRC = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DEAL_RADAR_DB") or SRC.parent / "deals.db")
 STATIC_DIR = SRC / "static"
 
-PORT = 8787
+HOST = os.environ.get("DEAL_RADAR_HOST", "127.0.0.1")  # 0.0.0.0 inside a container
+PORT = int(os.environ.get("DEAL_RADAR_PORT", "8787"))
 REFRESH_EVERY_S = 30 * 60           # background refresh interval
 
 USER_AGENT = "DealRadar/1.0 (personal deal tracker; RSS reader)"

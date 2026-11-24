@@ -1,0 +1,18 @@
+[project]
+name = "deal-radar"
+version = "1.0.0"
+description = "Self-hosted deal finder you configure on first run. Python standard library only."
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.ruff]
+line-length = 130
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+ignore = ["E731"]  # small lambdas are used on purpose as one-line helpers
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "db", "feeds", "net", "profiles", "refresh", "server", "stores", "views", "wishlist", "tests"]
